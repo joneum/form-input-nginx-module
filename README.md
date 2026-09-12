@@ -34,12 +34,12 @@ Installation
 ============
 
 Grab the nginx source code from [nginx.org](https://nginx.org/), for example,
-the version 1.28.0 (see [nginx compatibility](#compatibility)), and then build the source with this module:
+the current stable version 1.30.4 (see [nginx compatibility](#compatibility)), and then build the source with this module:
 
 ```bash
-wget 'https://nginx.org/download/nginx-1.28.0.tar.gz'
-tar -xzvf nginx-1.28.0.tar.gz
-cd nginx-1.28.0/
+wget 'https://nginx.org/download/nginx-1.30.4.tar.gz'
+tar -xzvf nginx-1.30.4.tar.gz
+cd nginx-1.30.4/
 
 ./configure --add-module=/path/to/ngx_devel_kit \
     --add-module=/path/to/form-input-nginx-module
@@ -135,16 +135,9 @@ to be set to the same value. That is no longer necessary.
 Compatibility
 =============
 
-The test suite passes against these versions of nginx:
-
-* 1.31.x (tested: 1.31.5)
-* 1.28.x (tested: 1.28.0)
-* 1.26.x (tested: 1.26.3)
-* 1.24.x (tested: 1.24.0)
-* 1.22.x (tested: 1.22.0)
-
-Releases down to 0.8.54 were supported by earlier versions of this module
-and are no longer tested.
+This module is kept working with the current nginx releases, mainline
+1.31.5 and stable 1.30.4.  The test suite is still run against older
+releases down to 1.22 and passes there.
 
 A note on nginx 1.30.4: form_input itself works there, but
 array-var-nginx-module and set-misc-nginx-module do not.  Every request
