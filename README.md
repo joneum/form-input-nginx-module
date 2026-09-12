@@ -11,6 +11,9 @@ Table of Contents
 * [Installation](#installation)
     * [Building as a dynamic module](#building-as-a-dynamic-module)
 * [Usage](#usage)
+* [Directives](#directives)
+    * [set_form_input](#set_form_input)
+    * [set_form_input_multi](#set_form_input_multi)
 * [Limitations](#limitations)
 * [Compatibility](#compatibility)
 * [Source Repository](#source-repository)
@@ -20,9 +23,9 @@ Table of Contents
 Description
 ===========
 
-This is a nginx module that reads HTTP POST and PUT request body encoded
-in "application/x-www-form-urlencoded", and parse the arguments in
-request body into nginx variables.
+This is an nginx module that reads HTTP POST and PUT request bodies
+encoded in "application/x-www-form-urlencoded" and parses the fields of
+that body into nginx variables.
 
 This module depends on the ngx_devel_kit (NDK) module.
 
@@ -57,7 +60,7 @@ Building as a dynamic module
 ----------------------------
 
 Starting from NGINX 1.9.11, you can also compile this module as a dynamic module, by using the `--add-dynamic-module=PATH` option instead of `--add-module=PATH` on the
-`./configure` command line above. And then you can explicitly load the module in your `nginx.conf` via the [load_module](http://nginx.org/en/docs/ngx_core_module.html#load_module)
+`./configure` command line above. And then you can explicitly load the module in your `nginx.conf` via the [load_module](https://nginx.org/en/docs/ngx_core_module.html#load_module)
 directive, for example,
 
 ```nginx
@@ -96,8 +99,8 @@ location /bar {
     set_form_input_multi $data; # read all "data" field into $data
     set_form_input_multi $foo data; # read all "data" field into $foo
 
-    array_join ' ' $data; # now $data is an string
-    array_join ' ' $foo;  # now $foo is an string
+    array_join ' ' $data; # now $data is a string
+    array_join ' ' $foo;  # now $foo is a string
 }
 
 location /baz {
@@ -110,6 +113,65 @@ location /baz {
     set_unescape_uri $data;
 }
 ```
+
+[Back to TOC](#table-of-contents)
+
+Directives
+==========
+
+set_form_input
+--------------
+
+**syntax:** *set_form_input $variable*
+
+**syntax:** *set_form_input $variable field*
+
+**default:** *no*
+
+**context:** *http, server, location*
+
+**phase:** *rewrite*
+
+Reads a field out of the request body and assigns it to `$variable`.
+When no field name is given, the name of the variable without the
+leading `$` is used, so `set_form_input $data;` reads the field named
+`data`.
+
+Only POST and PUT requests carrying a content type of
+`application/x-www-form-urlencoded` are looked at.  Everything else
+passes through and the variable stays empty.  The variable is also empty
+when the field does not occur in the body.
+
+If the field occurs more than once, the first occurrence wins.  Use
+`set_form_input_multi` to get all of them.
+
+The value is assigned exactly as it appears in the body, that is still
+percent encoded and with `+` standing for a space.  See
+[Limitations](#limitations) for how to decode it.
+
+[Back to TOC](#table-of-contents)
+
+set_form_input_multi
+--------------------
+
+**syntax:** *set_form_input_multi $variable*
+
+**syntax:** *set_form_input_multi $variable field*
+
+**default:** *no*
+
+**context:** *http, server, location*
+
+**phase:** *rewrite*
+
+Behaves like `set_form_input`, but collects every occurrence of the
+field instead of only the first one.
+
+The variable does not hold a string afterwards.  It carries an array
+that only the directives of
+[array-var-nginx-module](https://github.com/openresty/array-var-nginx-module)
+can read, `array_join` in particular.  Printing the variable on its own
+yields the raw bytes of the array structure, not the field values.
 
 [Back to TOC](#table-of-contents)
 
