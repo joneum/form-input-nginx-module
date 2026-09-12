@@ -117,7 +117,7 @@ to decode them.
 
 Request bodies that nginx buffers to a temporary file, which happens as soon
 as they exceed `client_body_buffer_size`, are read back from that file since
-version 0.13. Earlier versions discarded them, which is why older
+version 0.12.1. Earlier versions discarded them, which is why older
 documentation asked for `client_max_body_size` and `client_body_buffer_size`
 to be set to the same value. That is no longer necessary.
 
@@ -126,18 +126,22 @@ to be set to the same value. That is no longer necessary.
 Compatibility
 =============
 
-The following versions of Nginx should work with this module:
+The test suite passes against these versions of nginx:
 
-* 1.9.x (last tested: 1.9.15)
-* 1.8.x
-* 1.7.x (last tested: 1.7.4)
-* 1.6.x
-* 1.5.x (last tested: 1.5.12)
-* 1.4.x (last tested: 1.4.6)
-* 1.1.x (last tested: 1.1.5)
-* 1.0.x (last tested: 1.0.8)
-* 0.9.x (last tested: 0.9.4)
-* 0.8.x >= 0.8.54
+* 1.31.x (tested: 1.31.5)
+* 1.28.x (tested: 1.28.0)
+* 1.26.x (tested: 1.26.3)
+* 1.24.x (tested: 1.24.0)
+* 1.22.x (tested: 1.22.0)
+
+Releases down to 0.8.54 were supported by earlier versions of this module
+and are no longer tested.
+
+A note on nginx 1.30.4: form_input itself works there, but
+array-var-nginx-module and set-misc-nginx-module do not.  Every request
+passing through array_join or set_unescape_uri terminates the worker
+process, which makes set_form_input_multi and decoding unusable on that
+release.  1.30.0 to 1.30.3 and 1.31.x are not affected.
 
 [Back to TOC](#table-of-contents)
 
