@@ -45,14 +45,14 @@ static ngx_int_t ngx_http_form_input_read_body(ngx_http_request_t *r,
 static ngx_command_t ngx_http_form_input_commands[] = {
 
     { ngx_string("set_form_input"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
       ngx_http_set_form_input_conf_handler,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
       NULL },
 
     { ngx_string("set_form_input_multi"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
       ngx_http_set_form_input_conf_handler,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,

@@ -159,9 +159,10 @@ The value is assigned exactly as it appears in the body, that is still
 percent encoded and with `+` standing for a space.  See
 [Limitations](#limitations) for how to decode it.
 
-The configuration parser also accepts the directive in a `server` or
-`http` block, but it has no effect there and the variable stays empty
-without any warning.  Put it in a `location`.
+The directive belongs in a `location`.  Older versions of this module
+also accepted it in a `server` or `http` block, where it had no effect
+and left the variable empty without a warning.  Since 0.12.2 nginx
+refuses to start on such a configuration.
 
 [Back to TOC](#table-of-contents)
 
