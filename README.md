@@ -155,6 +155,13 @@ when the field does not occur in the body.
 If the field occurs more than once, the first occurrence wins.  Use
 `set_form_input_multi` to get all of them.
 
+Field names are matched without regard to case, so `set_form_input $v
+data;` also reads a field sent as `DATA`.  This is what nginx itself
+does for query arguments, `ngx_http_arg()` behind `$arg_name` matches
+the same way.  Together with the rule above it means a client decides
+which spelling wins by sending it first: out of `DATA=a&data=b` the
+variable receives `a`.
+
 The value is assigned exactly as it appears in the body, that is still
 percent encoded and with `+` standing for a space.  See
 [Limitations](#limitations) for how to decode it.
