@@ -90,6 +90,16 @@ location /bar {
     array_join ' ' $data; # now $data is an string
     array_join ' ' $foo;  # now $foo is an string
 }
+
+location /baz {
+    client_max_body_size 100k;
+
+    # values come out of the body as they were sent, that is still
+    # percent encoded and with '+' for a space.  set_unescape_uri from
+    # set-misc-nginx-module turns "a+b%26c" into "a b&c".
+    set_form_input $data;
+    set_unescape_uri $data;
+}
 ```
 
 [Back to TOC](#table-of-contents)
