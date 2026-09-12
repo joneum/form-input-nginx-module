@@ -23,6 +23,8 @@ typedef struct {
 typedef struct {
     unsigned          done:1;
     unsigned          waiting_more_body:1;
+    unsigned          body_read:1;
+    ngx_str_t         body;
 } ngx_http_form_input_ctx_t;
 
 
@@ -188,6 +190,11 @@ ngx_http_form_input_arg(ngx_http_request_t *r, u_char *arg_name, size_t arg_len,
         ngx_str_set(value, "");
     }
 
+    if (arg_len == 0) {
+        dd("empty field name");
+        return NGX_OK;
+    }
+
     if (ngx_http_form_input_read_body(r, &body) != NGX_OK) {
         return NGX_ERROR;
     }
@@ -257,40 +264,57 @@ ngx_http_form_input_arg(ngx_http_request_t *r, u_char *arg_name, size_t arg_len,
 /* make the whole request body available as one contiguous buffer.
  * nginx writes the body to a temporary file as soon as it exceeds
  * client_body_buffer_size, so a buffer may live in a file rather than
- * in memory. the single in-memory buffer case is handed out as is. */
+ * in memory.  the single in-memory buffer is handed out as is, anything
+ * else is assembled once and kept in the module context, because this
+ * runs once per set_form_input directive and not once per request. */
 static ngx_int_t
 ngx_http_form_input_read_body(ngx_http_request_t *r, ngx_str_t *body)
 {
-    u_char              *p;
-    size_t               len;
-    ssize_t              n;
-    ngx_buf_t           *b;
-    ngx_chain_t         *cl;
+    u_char                       *p;
+    size_t                        len, size;
+    ssize_t                       n;
+    off_t                         total;
+    ngx_buf_t                    *b;
+    ngx_chain_t                  *cl;
+    ngx_http_form_input_ctx_t    *ctx;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_http_form_input_module);
+
+    if (ctx != NULL && ctx->body_read) {
+        *body = ctx->body;
+        return NGX_OK;
+    }
 
     ngx_str_null(body);
 
     if (r->request_body == NULL || r->request_body->bufs == NULL) {
         dd("empty rb or empty rb bufs");
-        return NGX_OK;
+        goto done;
     }
 
-    len = 0;
+    total = 0;
 
     for (cl = r->request_body->bufs; cl; cl = cl->next) {
         b = cl->buf;
 
-        if (b->in_file) {
-            len += (size_t) (b->file_last - b->file_pos);
-
-        } else {
-            len += (size_t) (b->last - b->pos);
-        }
+        total += b->in_file ? b->file_last - b->file_pos : b->last - b->pos;
     }
+
+    /* off_t is wider than size_t on 32 bit platforms */
+
+    if (total < 0 || (uint64_t) total > (uint64_t) NGX_MAX_SIZE_T_VALUE) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "form-input: request body of %O bytes is too large "
+                      "to parse", total);
+        return NGX_ERROR;
+    }
+
+    len = (size_t) total;
 
     dd("body len=%d", (int) len);
 
     if (len == 0) {
-        return NGX_OK;
+        goto done;
     }
 
     if (r->request_body->bufs->next == NULL
@@ -301,7 +325,7 @@ ngx_http_form_input_read_body(ngx_http_request_t *r, ngx_str_t *body)
         body->data = r->request_body->bufs->buf->pos;
         body->len = len;
 
-        return NGX_OK;
+        goto done;
     }
 
     p = ngx_palloc(r->pool, len);
@@ -316,13 +340,24 @@ ngx_http_form_input_read_body(ngx_http_request_t *r, ngx_str_t *body)
         b = cl->buf;
 
         if (b->in_file) {
-            n = ngx_read_file(b->file, p, (size_t) (b->file_last - b->file_pos),
-                              b->file_pos);
+            size = (size_t) (b->file_last - b->file_pos);
+
+            n = ngx_read_file(b->file, p, size, b->file_pos);
 
             if (n == NGX_ERROR) {
                 ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                               "form-input: failed to read the request body "
                               "from \"%V\"", &b->file->name);
+
+                ngx_str_null(body);
+
+                return NGX_ERROR;
+            }
+
+            if ((size_t) n != size) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                              "form-input: read only %z of %uz from \"%V\"",
+                              n, size, &b->file->name);
 
                 ngx_str_null(body);
 
@@ -336,9 +371,18 @@ ngx_http_form_input_read_body(ngx_http_request_t *r, ngx_str_t *body)
         }
     }
 
+    /* never hand out more than was actually written */
+
     body->len = (size_t) (p - body->data);
 
     dd("copied body (len %d)", (int) body->len);
+
+done:
+
+    if (ctx != NULL) {
+        ctx->body = *body;
+        ctx->body_read = 1;
+    }
 
     return NGX_OK;
 }
