@@ -33,6 +33,11 @@ typedef struct {
 
 
 typedef struct {
+    ngx_flag_t      used;
+} ngx_http_form_input_loc_conf_t;
+
+
+typedef struct {
     unsigned          done:1;
     unsigned          waiting_more_body:1;
     unsigned          body_read:1;
@@ -45,6 +50,9 @@ static ngx_int_t ngx_http_set_form_input(ngx_http_request_t *r, ngx_str_t *res,
 static char *ngx_http_set_form_input_conf_handler(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
 static void *ngx_http_form_input_create_main_conf(ngx_conf_t *cf);
+static void *ngx_http_form_input_create_loc_conf(ngx_conf_t *cf);
+static char *ngx_http_form_input_merge_loc_conf(ngx_conf_t *cf, void *parent,
+    void *child);
 static ngx_int_t ngx_http_form_input_init(ngx_conf_t *cf);
 static ngx_int_t ngx_http_form_input_handler(ngx_http_request_t *r);
 static void ngx_http_form_input_post_read(ngx_http_request_t *r);
@@ -84,8 +92,8 @@ static ngx_http_module_t ngx_http_form_input_module_ctx = {
     NULL,                                   /* create server configuration */
     NULL,                                   /* merge server configuration */
 
-    NULL,                                   /* create location configuration */
-    NULL                                    /* merge location configuration */
+    ngx_http_form_input_create_loc_conf,     /* create location configuration */
+    ngx_http_form_input_merge_loc_conf       /* merge location configuration */
 };
 
 
@@ -408,14 +416,15 @@ ngx_http_set_form_input_conf_handler(ngx_conf_t *cf, ngx_command_t *cmd,
     ngx_str_t                               *value, s;
     u_char                                  *p;
     ngx_http_form_input_main_conf_t         *fmcf;
-
-#if defined(nginx_version) && nginx_version >= 8042 && nginx_version <= 8053
-    return "does not work with " NGINX_VER;
-#endif
+    ngx_http_form_input_loc_conf_t          *flcf = conf;
 
     fmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_form_input_module);
 
+    /* the main flag decides whether the phase handler is installed at
+     * all, the location flag whether it does anything for a request */
+
     fmcf->used = 1;
+    flcf->used = 1;
 
     filter.type = NDK_SET_VAR_MULTI_VALUE;
     filter.size = 1;
@@ -483,6 +492,7 @@ static ngx_int_t
 ngx_http_form_input_handler(ngx_http_request_t *r)
 {
     ngx_http_form_input_ctx_t       *ctx;
+    ngx_http_form_input_loc_conf_t  *flcf;
     ngx_str_t                        value;
     ngx_int_t                        rc;
 
@@ -502,6 +512,16 @@ ngx_http_form_input_handler(ngx_http_request_t *r)
         }
 
         return NGX_DONE;
+    }
+
+    /* the handler sits in the rewrite phase of every request, so without
+     * this a single directive anywhere would buffer the body of every
+     * urlencoded POST and PUT in the whole server */
+
+    flcf = ngx_http_get_module_loc_conf(r, ngx_http_form_input_module);
+
+    if (!flcf->used) {
+        return NGX_DECLINED;
     }
 
     if (r->method != NGX_HTTP_POST && r->method != NGX_HTTP_PUT) {
@@ -617,4 +637,38 @@ ngx_http_form_input_create_main_conf(ngx_conf_t *cf)
      */
 
     return fmcf;
+}
+
+
+static void *
+ngx_http_form_input_create_loc_conf(ngx_conf_t *cf)
+{
+    ngx_http_form_input_loc_conf_t     *flcf;
+
+    flcf = ngx_pcalloc(cf->pool, sizeof(ngx_http_form_input_loc_conf_t));
+    if (flcf == NULL) {
+        return NULL;
+    }
+
+    flcf->used = NGX_CONF_UNSET;
+
+    return flcf;
+}
+
+
+static char *
+ngx_http_form_input_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+{
+    ngx_http_form_input_loc_conf_t     *conf = child;
+
+    /* deliberately not inherited.  the directives compile into the
+     * rewrite module, and ngx_http_rewrite_merge_loc_conf leaves a
+     * nested location without codes of its own empty handed, so a
+     * nested location would buffer request bodies for nothing */
+
+    if (conf->used == NGX_CONF_UNSET) {
+        conf->used = 0;
+    }
+
+    return NGX_CONF_OK;
 }
