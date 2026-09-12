@@ -13,6 +13,8 @@ Table of Contents
 * [Usage](#usage)
 * [Limitations](#limitations)
 * [Compatibility](#compatibility)
+* [Source Repository](#source-repository)
+* [Bugs and Patches](#bugs-and-patches)
 * [Copyright & License](#copyright--license)
 
 Description
@@ -24,16 +26,20 @@ request body into nginx variables.
 
 This module depends on the ngx_devel_kit (NDK) module.
 
+This is a maintained continuation of
+[calio/form-input-nginx-module](https://github.com/calio/form-input-nginx-module),
+which has seen no release since 0.12 in 2016.
+
 Installation
 ============
 
-Grab the nginx source code from [nginx.org](http://nginx.org/), for example,
-the version 1.9.15 (see [nginx compatibility](#compatibility)), and then build the source with this module:
+Grab the nginx source code from [nginx.org](https://nginx.org/), for example,
+the version 1.28.0 (see [nginx compatibility](#compatibility)), and then build the source with this module:
 
 ```bash
-wget 'http://nginx.org/download/nginx-1.9.15.tar.gz'
-tar -xzvf nginx-1.9.15.tar.gz
-cd nginx-1.9.15/
+wget 'https://nginx.org/download/nginx-1.28.0.tar.gz'
+tar -xzvf nginx-1.28.0.tar.gz
+cd nginx-1.28.0/
 
 ./configure --add-module=/path/to/ngx_devel_kit \
     --add-module=/path/to/form-input-nginx-module
@@ -42,7 +48,10 @@ make -j2
 make install
 ```
 
-Download the latest version of the release tarball of this module from [form-input-nginx-module file list](http://github.com/calio/form-input-nginx-module/tags), and the latest tarball for [ngx_devel_kit](https://github.com/simpl/ngx_devel_kit) from its [file list](https://github.com/simpl/ngx_devel_kit/tags).
+Download the latest version of the release tarball of this module from its
+[file list](https://github.com/joneum/form-input-nginx-module/tags), and the
+latest tarball for [ngx_devel_kit](https://github.com/openresty/ngx_devel_kit)
+from its [file list](https://github.com/openresty/ngx_devel_kit/tags).
 
 Building as a dynamic module
 ----------------------------
@@ -145,12 +154,33 @@ release.  1.30.0 to 1.30.3 and 1.31.x are not affected.
 
 [Back to TOC](#table-of-contents)
 
+Source Repository
+=================
+
+This module is hosted at
+[github.com/joneum/form-input-nginx-module](https://github.com/joneum/form-input-nginx-module)
+and maintained by Jochen Neumeister.
+
+[Back to TOC](#table-of-contents)
+
+Bugs and Patches
+================
+
+Please report bugs and send patches through the
+[GitHub issue tracker](https://github.com/joneum/form-input-nginx-module/issues)
+of this repository.  The issue tracker of the original project is not
+watched.
+
+[Back to TOC](#table-of-contents)
+
 Copyright & License
 ===================
 
 Copyright (c) 2010, 2011, Jiale "calio" Zhi <vipcalio@gmail.com>.
 
 Copyright (c) 2010-2016, Yichun "agentzh" Zhang <agentzh@gmail.com>, CloudFlare Inc.
+
+Copyright (c) 2026, Jochen Neumeister <joneum@FreeBSD.org>.
 
 This module is licensed under the terms of the BSD license.
 
