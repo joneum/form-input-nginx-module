@@ -1,3 +1,15 @@
+/*
+ * Copyright (c) 2010, 2011, Jiale "calio" Zhi <vipcalio@gmail.com>.
+ * Copyright (c) 2010-2016, Yichun "agentzh" Zhang <agentzh@gmail.com>,
+ *     CloudFlare Inc.
+ * Copyright (c) 2026, Jochen Neumeister <joneum@FreeBSD.org>.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * See the LICENSE file in the root of this distribution.
+ */
+
+
 #ifndef DDEBUG
 #define DDEBUG 0
 #endif

@@ -295,7 +295,8 @@ Copyright (c) 2010-2016, Yichun "agentzh" Zhang <agentzh@gmail.com>, CloudFlare 
 
 Copyright (c) 2026, Jochen Neumeister <joneum@FreeBSD.org>.
 
-This module is licensed under the terms of the BSD license.
+This module is licensed under the terms of the BSD 2-Clause License.
+The full text is also in the LICENSE file.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
