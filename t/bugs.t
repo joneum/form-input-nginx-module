@@ -51,8 +51,8 @@ bar=32
 
 
 
-=== TEST 3: Internal server error when using array_map_op [calio/form-input-nginx-module GH-1]
-http://github.com/calio/form-input-nginx-module/issues#issue/1
+=== TEST 3: Internal server error when using array_map_op
+https://github.com/calio/form-input-nginx-module/issues/1
 --- config
    location ~ ^/(\w+)/(\d+)/?$ {
        set_form_input    $columns;
@@ -139,13 +139,6 @@ location /modtest {
 --- request
 POST /modtest
 val=foo&val=bar&val=baz
---- stap2
-probe process("$LIBPCRE_PATH").function("pcre_exec") {
-    printf("subj: %p\n", $subject);
-    printf("len: %d\n", $length);
-    #print_ubacktrace()
-}
---- stap_out2
 --- more_headers
 Content-Type: application/x-www-form-urlencoded
 --- response_body eval: "\ndone\n"

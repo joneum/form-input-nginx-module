@@ -93,8 +93,8 @@ static ngx_http_module_t ngx_http_form_input_module_ctx = {
     NULL,                                   /* create server configuration */
     NULL,                                   /* merge server configuration */
 
-    ngx_http_form_input_create_loc_conf,     /* create location configuration */
-    ngx_http_form_input_merge_loc_conf       /* merge location configuration */
+    ngx_http_form_input_create_loc_conf,    /* create location configuration */
+    ngx_http_form_input_merge_loc_conf      /* merge location configuration */
 };
 
 
@@ -161,9 +161,8 @@ ngx_http_set_form_input_multi(ngx_http_request_t *r, ngx_str_t *res,
     dd("set default return value");
     ngx_str_set(res, "");
 
-    /* dd("set default return value"); */
-
     if (r->done) {
+        dd("request done");
         return NGX_OK;
     }
 
@@ -270,13 +269,6 @@ ngx_http_form_input_arg(ngx_http_request_t *r, u_char *arg_name, size_t arg_len,
             }
         }
     }
-
-#if 0
-    if (multi) {
-        value->data = (u_char *) array;
-        value->len = sizeof(ngx_array_t);
-    }
-#endif
 
     return NGX_OK;
 }
@@ -596,6 +588,8 @@ ngx_http_form_input_handler(ngx_http_request_t *r)
     /* set by ngx_pcalloc:
      *      ctx->done = 0;
      *      ctx->waiting_more_body = 0;
+     *      ctx->body_read = 0;
+     *      ctx->body = { 0, NULL };
      */
 
     ngx_http_set_ctx(r, ctx, ngx_http_form_input_module);
@@ -606,11 +600,6 @@ ngx_http_form_input_handler(ngx_http_request_t *r)
     rc = ngx_http_read_client_request_body(r, ngx_http_form_input_post_read);
 
     if (rc == NGX_ERROR || rc >= NGX_HTTP_SPECIAL_RESPONSE) {
-#if (nginx_version < 1002006) ||                                             \
-        (nginx_version >= 1003000 && nginx_version < 1003009)
-        r->main->count--;
-#endif
-
         return rc;
     }
 
@@ -639,14 +628,13 @@ ngx_http_form_input_post_read(ngx_http_request_t *r)
 
     ctx->done = 1;
 
-#if defined(nginx_version) && nginx_version >= 8011
     dd("count--");
     r->main->count--;
-#endif
 
     dd("waiting more body: %d", (int) ctx->waiting_more_body);
 
-    /* waiting_more_body my rewrite phase handler */
+    /* the rewrite phase handler is waiting for this */
+
     if (ctx->waiting_more_body) {
         ctx->waiting_more_body = 0;
 
