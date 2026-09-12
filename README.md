@@ -16,6 +16,7 @@ Table of Contents
     * [set_form_input_multi](#set_form_input_multi)
 * [Limitations](#limitations)
 * [Compatibility](#compatibility)
+* [Test Suite](#test-suite)
 * [Source Repository](#source-repository)
 * [Bugs and Patches](#bugs-and-patches)
 * [Copyright & License](#copyright--license)
@@ -36,13 +37,17 @@ which has seen no release since 0.12 in 2016.
 Installation
 ============
 
-Grab the nginx source code from [nginx.org](https://nginx.org/), for example,
-the current stable version 1.30.4 (see [nginx compatibility](#compatibility)), and then build the source with this module:
+Download the release tarball of this module from its
+[file list](https://github.com/joneum/form-input-nginx-module/tags) and the
+tarball for [ngx_devel_kit](https://github.com/openresty/ngx_devel_kit)
+from its [file list](https://github.com/openresty/ngx_devel_kit/tags).  Then
+grab the nginx source code from [nginx.org](https://nginx.org/), for example
+the current mainline version, and build it with both modules:
 
 ```bash
-wget 'https://nginx.org/download/nginx-1.30.4.tar.gz'
-tar -xzvf nginx-1.30.4.tar.gz
-cd nginx-1.30.4/
+wget 'https://nginx.org/download/nginx-1.31.5.tar.gz'
+tar -xzvf nginx-1.31.5.tar.gz
+cd nginx-1.31.5/
 
 ./configure --add-module=/path/to/ngx_devel_kit \
     --add-module=/path/to/form-input-nginx-module
@@ -51,10 +56,15 @@ make -j2
 make install
 ```
 
-Download the latest version of the release tarball of this module from its
-[file list](https://github.com/joneum/form-input-nginx-module/tags), and the
-latest tarball for [ngx_devel_kit](https://github.com/openresty/ngx_devel_kit)
-from its [file list](https://github.com/openresty/ngx_devel_kit/tags).
+Read [Compatibility](#compatibility) before picking a version, the current
+stable release needs a caveat.
+
+Two further modules are worth adding on the same command line.
+[set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
+brings `set_unescape_uri`, which decodes the field values, and
+[array-var-nginx-module](https://github.com/openresty/array-var-nginx-module)
+brings `array_join`, without which `set_form_input_multi` cannot be used at
+all.  Both need ngx_devel_kit as well, so put it first in either case.
 
 Building as a dynamic module
 ----------------------------
@@ -128,7 +138,7 @@ set_form_input
 
 **default:** *no*
 
-**context:** *http, server, location*
+**context:** *location*
 
 **phase:** *rewrite*
 
@@ -149,6 +159,10 @@ The value is assigned exactly as it appears in the body, that is still
 percent encoded and with `+` standing for a space.  See
 [Limitations](#limitations) for how to decode it.
 
+The configuration parser also accepts the directive in a `server` or
+`http` block, but it has no effect there and the variable stays empty
+without any warning.  Put it in a `location`.
+
 [Back to TOC](#table-of-contents)
 
 set_form_input_multi
@@ -160,12 +174,13 @@ set_form_input_multi
 
 **default:** *no*
 
-**context:** *http, server, location*
+**context:** *location*
 
 **phase:** *rewrite*
 
 Behaves like `set_form_input`, but collects every occurrence of the
-field instead of only the first one.
+field instead of only the first one.  The note about `server` and `http`
+blocks above applies here as well.
 
 The variable does not hold a string afterwards.  It carries an array
 that only the directives of
@@ -198,14 +213,56 @@ Compatibility
 =============
 
 This module is kept working with the current nginx releases, mainline
-1.31.5 and stable 1.30.4.  The test suite is still run against older
+1.31.5 and stable 1.30.4.  The test suite is also run against older
 releases down to 1.22 and passes there.
 
-A note on nginx 1.30.4: form_input itself works there, but
-array-var-nginx-module and set-misc-nginx-module do not.  Every request
-passing through array_join or set_unescape_uri terminates the worker
-process, which makes set_form_input_multi and decoding unusable on that
-release.  1.30.0 to 1.30.3 and 1.31.x are not affected.
+A caveat on the current stable, nginx 1.30.4: form_input itself works on
+it, but array-var-nginx-module and set-misc-nginx-module do not.  Every
+request passing through `array_join` or `set_unescape_uri` terminates
+the worker process, which leaves `set_form_input_multi` and decoding
+unusable on that release.  Measured against their own test suites, which
+fail completely on 1.30.4 and pass on 1.30.0 to 1.30.3 and on 1.31.x.
+The cause was not tracked down further, form_input is not involved: the
+same failure occurs in an nginx built without this module.
+
+[Back to TOC](#table-of-contents)
+
+Test Suite
+==========
+
+The tests are written for
+[Test::Nginx::Socket](https://metacpan.org/dist/Test-Nginx), install it from
+CPAN:
+
+```bash
+cpanm --notest Test::Nginx::Socket
+```
+
+They do not exercise this module on its own.  Build an nginx that carries
+ngx_devel_kit, [echo-nginx-module](https://github.com/openresty/echo-nginx-module)
+for the output, [set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
+and [array-var-nginx-module](https://github.com/openresty/array-var-nginx-module),
+plus this module.  ngx_devel_kit has to come before the modules that use it:
+
+```bash
+./configure --prefix=/tmp/nginx-test \
+    --add-module=/path/to/ngx_devel_kit \
+    --add-module=/path/to/echo-nginx-module \
+    --add-module=/path/to/form-input-nginx-module \
+    --add-module=/path/to/set-misc-nginx-module \
+    --add-module=/path/to/array-var-nginx-module
+make && make install
+```
+
+Then point the suite at that binary and run it from the root of this
+repository:
+
+```bash
+TEST_NGINX_BINARY=/tmp/nginx-test/sbin/nginx prove -r t/
+```
+
+`valgrind.suppress` in the repository root is picked up automatically when
+the tests are run with `TEST_NGINX_USE_VALGRIND`.
 
 [Back to TOC](#table-of-contents)
 
