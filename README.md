@@ -75,18 +75,14 @@ example:
 #nginx.conf
 
 location /foo {
-    # ensure client_max_body_size == client_body_buffer_size
     client_max_body_size 100k;
-    client_body_buffer_size 100k;
 
     set_form_input $data;    # read "data" field into $data
     set_form_input $foo foo; # read "foo" field into $foo
 }
 
 location /bar {
-    # ensure client_max_body_size == client_body_buffer_size
     client_max_body_size 1m;
-    client_body_buffer_size 1m;
 
     set_form_input_multi $data; # read all "data" field into $data
     set_form_input_multi $foo data; # read all "data" field into $foo
@@ -101,13 +97,19 @@ location /bar {
 Limitations
 ===========
 
-* ngx_form_input will discard request bodies that are buffered
-to disk files. When the client_max_body_size setting is larger than
-client_body_buffer_size, request bodies that are larger
-than client_body_buffer_size (but no larger than
-client_max_body_size) will be buffered to disk files.
-So it's important to ensure these two config settings take
-the same values to avoid confustion.
+* Only bodies encoded as `application/x-www-form-urlencoded` are parsed.
+Any other content type, `multipart/form-data` in particular, is left alone.
+
+* Field values are handed out exactly as they appear in the body, that is
+still percent encoded. Use `set_unescape_uri` from
+[set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
+to decode them.
+
+Request bodies that nginx buffers to a temporary file, which happens as soon
+as they exceed `client_body_buffer_size`, are read back from that file since
+version 0.13. Earlier versions discarded them, which is why older
+documentation asked for `client_max_body_size` and `client_body_buffer_size`
+to be set to the same value. That is no longer necessary.
 
 [Back to TOC](#table-of-contents)
 

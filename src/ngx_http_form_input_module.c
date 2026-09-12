@@ -36,6 +36,8 @@ static ngx_int_t ngx_http_form_input_handler(ngx_http_request_t *r);
 static void ngx_http_form_input_post_read(ngx_http_request_t *r);
 static ngx_int_t ngx_http_form_input_arg(ngx_http_request_t *r, u_char *name,
     size_t len, ngx_str_t *value, ngx_flag_t multi);
+static ngx_int_t ngx_http_form_input_read_body(ngx_http_request_t *r,
+    ngx_str_t *body);
 
 
 static ngx_command_t ngx_http_form_input_commands[] = {
@@ -170,11 +172,9 @@ ngx_http_form_input_arg(ngx_http_request_t *r, u_char *arg_name, size_t arg_len,
     ngx_str_t *value, ngx_flag_t multi)
 {
     u_char              *p, *v, *last, *buf;
-    ngx_chain_t         *cl;
-    size_t               len = 0;
     ngx_array_t         *array = NULL;
     ngx_str_t           *s;
-    ngx_buf_t           *b;
+    ngx_str_t            body;
 
     if (multi) {
         array = ngx_array_create(r->pool, 1, sizeof(ngx_str_t));
@@ -188,65 +188,16 @@ ngx_http_form_input_arg(ngx_http_request_t *r, u_char *arg_name, size_t arg_len,
         ngx_str_set(value, "");
     }
 
-    /* we read data from r->request_body->bufs */
-    if (r->request_body == NULL || r->request_body->bufs == NULL) {
-        dd("empty rb or empty rb bufs");
+    if (ngx_http_form_input_read_body(r, &body) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    if (body.len == 0) {
         return NGX_OK;
     }
 
-    if (r->request_body->bufs->next != NULL) {
-        /* more than one buffer...we should copy the data out... */
-        len = 0;
-        for (cl = r->request_body->bufs; cl; cl = cl->next) {
-            b = cl->buf;
-
-            if (b->in_file) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                              "form-input: in-file buffer found. aborted. "
-                              "consider increasing your "
-                              "client_body_buffer_size setting");
-
-                return NGX_OK;
-            }
-
-            len += b->last - b->pos;
-        }
-
-        dd("len=%d", (int) len);
-
-        if (len == 0) {
-            return NGX_OK;
-        }
-
-        buf = ngx_palloc(r->pool, len);
-        if (buf == NULL) {
-            return NGX_ERROR;
-        }
-
-        p = buf;
-        last = p + len;
-
-        for (cl = r->request_body->bufs; cl; cl = cl->next) {
-            p = ngx_copy(p, cl->buf->pos, cl->buf->last - cl->buf->pos);
-        }
-
-        dd("p - buf = %d, last - buf = %d", (int) (p - buf),
-           (int) (last - buf));
-
-        dd("copied buf (len %d): %.*s", (int) len, (int) len,
-           buf);
-
-    } else {
-        dd("XXX one buffer only");
-
-        b = r->request_body->bufs->buf;
-        if (ngx_buf_size(b) == 0) {
-            return NGX_OK;
-        }
-
-        buf = b->pos;
-        last = b->last;
-    }
+    buf = body.data;
+    last = body.data + body.len;
 
     for (p = buf; p < last; p++) {
         /* we need '=' after name, so drop one char from last */
@@ -298,6 +249,96 @@ ngx_http_form_input_arg(ngx_http_request_t *r, u_char *arg_name, size_t arg_len,
         value->len = sizeof(ngx_array_t);
     }
 #endif
+
+    return NGX_OK;
+}
+
+
+/* make the whole request body available as one contiguous buffer.
+ * nginx writes the body to a temporary file as soon as it exceeds
+ * client_body_buffer_size, so a buffer may live in a file rather than
+ * in memory. the single in-memory buffer case is handed out as is. */
+static ngx_int_t
+ngx_http_form_input_read_body(ngx_http_request_t *r, ngx_str_t *body)
+{
+    u_char              *p;
+    size_t               len;
+    ssize_t              n;
+    ngx_buf_t           *b;
+    ngx_chain_t         *cl;
+
+    ngx_str_null(body);
+
+    if (r->request_body == NULL || r->request_body->bufs == NULL) {
+        dd("empty rb or empty rb bufs");
+        return NGX_OK;
+    }
+
+    len = 0;
+
+    for (cl = r->request_body->bufs; cl; cl = cl->next) {
+        b = cl->buf;
+
+        if (b->in_file) {
+            len += (size_t) (b->file_last - b->file_pos);
+
+        } else {
+            len += (size_t) (b->last - b->pos);
+        }
+    }
+
+    dd("body len=%d", (int) len);
+
+    if (len == 0) {
+        return NGX_OK;
+    }
+
+    if (r->request_body->bufs->next == NULL
+        && !r->request_body->bufs->buf->in_file)
+    {
+        dd("one in-memory buffer only, no copy needed");
+
+        body->data = r->request_body->bufs->buf->pos;
+        body->len = len;
+
+        return NGX_OK;
+    }
+
+    p = ngx_palloc(r->pool, len);
+    if (p == NULL) {
+        return NGX_ERROR;
+    }
+
+    body->data = p;
+    body->len = len;
+
+    for (cl = r->request_body->bufs; cl; cl = cl->next) {
+        b = cl->buf;
+
+        if (b->in_file) {
+            n = ngx_read_file(b->file, p, (size_t) (b->file_last - b->file_pos),
+                              b->file_pos);
+
+            if (n == NGX_ERROR) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                              "form-input: failed to read the request body "
+                              "from \"%V\"", &b->file->name);
+
+                ngx_str_null(body);
+
+                return NGX_ERROR;
+            }
+
+            p += n;
+
+        } else {
+            p = ngx_copy(p, b->pos, b->last - b->pos);
+        }
+    }
+
+    body->len = (size_t) (p - body->data);
+
+    dd("copied body (len %d)", (int) body->len);
 
     return NGX_OK;
 }
