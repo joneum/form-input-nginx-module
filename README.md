@@ -186,8 +186,16 @@ blocks above applies here as well.
 The variable does not hold a string afterwards.  It carries an array
 that only the directives of
 [array-var-nginx-module](https://github.com/openresty/array-var-nginx-module)
-can read, `array_join` in particular.  Printing the variable on its own
-yields the raw bytes of the array structure, not the field values.
+can read, `array_join` in particular.  Pass the variable through one of
+them before anything else touches it.
+
+Writing the variable straight into a response puts the raw bytes of the
+array structure there, live heap addresses included, instead of the
+field values.  That is a property of the calling convention that
+array-var defines, and array-var's own array variables behave the same
+way.  Since 0.12.2 nginx refuses to start when the directive is used in
+a build that has no array-var, because there is nothing that could read
+the variable then.
 
 [Back to TOC](#table-of-contents)
 

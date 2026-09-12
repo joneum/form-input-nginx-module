@@ -47,6 +47,7 @@ typedef struct {
 
 static ngx_int_t ngx_http_set_form_input(ngx_http_request_t *r, ngx_str_t *res,
     ngx_http_variable_value_t *v);
+static ngx_flag_t ngx_http_form_input_have_array_var(ngx_conf_t *cf);
 static char *ngx_http_set_form_input_conf_handler(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
 static void *ngx_http_form_input_create_main_conf(ngx_conf_t *cf);
@@ -408,6 +409,32 @@ done:
 }
 
 
+/* set_form_input_multi hands out an ngx_array_t behind a value of
+ * sizeof(ngx_array_t) bytes.  that is the calling convention of
+ * array-var-nginx-module and the only way to read such a variable.
+ * whatever else reads it sees the bare structure, so a configuration
+ * without array-var can do nothing with the variable but write the
+ * structure, live heap addresses included, into a response. */
+static ngx_flag_t
+ngx_http_form_input_have_array_var(ngx_conf_t *cf)
+{
+    ngx_uint_t           i;
+    ngx_module_t       **modules;
+
+    modules = cf->cycle->modules;
+
+    for (i = 0; modules[i] != NULL; i++) {
+        if (modules[i]->name != NULL
+            && ngx_strcmp(modules[i]->name, "ngx_http_array_var_module") == 0)
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
 static char *
 ngx_http_set_form_input_conf_handler(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf)
@@ -435,6 +462,12 @@ ngx_http_set_form_input_conf_handler(ngx_conf_t *cf, ngx_command_t *cmd,
         ngx_strncmp(value->data, "set_form_input_multi", value->len) == 0)
     {
         dd("use ngx_http_form_input_multi");
+
+        if (!ngx_http_form_input_have_array_var(cf)) {
+            return "needs array-var-nginx-module, which is missing from "
+                   "this build";
+        }
+
         filter.func = (void *) ngx_http_set_form_input_multi;
 
     } else {
