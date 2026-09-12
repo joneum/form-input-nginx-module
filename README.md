@@ -1,16 +1,18 @@
 Name
 ====
 
-form-input-nginx-module - NGINX module that reads HTTP POST and PUT request body encoded in "application/x-www-form-urlencoded" and parses the arguments into nginx variables.
+form-input-nginx-module - read the fields of an `application/x-www-form-urlencoded`
+request body into nginx variables.
 
 Table of Contents
 =================
 
 * [Name](#name)
 * [Description](#description)
+* [Status](#status)
+* [Synopsis](#synopsis)
 * [Installation](#installation)
     * [Building as a dynamic module](#building-as-a-dynamic-module)
-* [Usage](#usage)
 * [Directives](#directives)
     * [set_form_input](#set_form_input)
     * [set_form_input_multi](#set_form_input_multi)
@@ -24,104 +26,129 @@ Table of Contents
 Description
 ===========
 
-This is an nginx module that reads HTTP POST and PUT request bodies
-encoded in "application/x-www-form-urlencoded" and parses the fields of
-that body into nginx variables.
+nginx hands out the arguments of a query string as `$arg_name`, but it
+has nothing for the body of a form submission.  This module closes that
+gap: it parses the body of a POST or PUT request carrying a content type
+of `application/x-www-form-urlencoded` and assigns a field of that body
+to a variable.
 
-This module depends on the ngx_devel_kit (NDK) module.
+The work happens in the rewrite phase, before a content handler sees the
+request, so the value is available to everything that reads variables
+afterwards, `if`, `map`, `proxy_set_header`, the access log, a Lua
+handler, and so on.
+
+Only the locations that name a directive are affected.  Everywhere else
+the module stays out of the way and nginx streams request bodies as it
+normally would.
+
+[Back to TOC](#table-of-contents)
+
+Status
+======
 
 This is a maintained continuation of
 [calio/form-input-nginx-module](https://github.com/calio/form-input-nginx-module),
-which has seen no release since 0.12 in 2016.
+which has seen no release since 0.12 in 2016.  Development continues
+here, the issue tracker of the original project is not watched.
 
-Installation
-============
+The module is in use and the test suite is run against the current nginx
+releases before anything is pushed.  See
+[Compatibility](#compatibility).
 
-Download the release tarball of this module from its
-[file list](https://github.com/joneum/form-input-nginx-module/tags) and the
-tarball for [ngx_devel_kit](https://github.com/openresty/ngx_devel_kit)
-from its [file list](https://github.com/openresty/ngx_devel_kit/tags).  Then
-grab the nginx source code from [nginx.org](https://nginx.org/), for example
-the current mainline version, and build it with both modules:
+[Back to TOC](#table-of-contents)
 
-```bash
-wget 'https://nginx.org/download/nginx-1.31.5.tar.gz'
-tar -xzvf nginx-1.31.5.tar.gz
-cd nginx-1.31.5/
-
-./configure --add-module=/path/to/ngx_devel_kit \
-    --add-module=/path/to/form-input-nginx-module
-
-make -j2
-make install
-```
-
-Read [Compatibility](#compatibility) before picking a version, the current
-stable release needs a caveat.
-
-Two further modules are worth adding on the same command line.
-[set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
-brings `set_unescape_uri`, which decodes the field values, and
-[array-var-nginx-module](https://github.com/openresty/array-var-nginx-module)
-brings `array_join`, without which `set_form_input_multi` cannot be used at
-all.  Both need ngx_devel_kit as well, so put it first in either case.
-
-Building as a dynamic module
-----------------------------
-
-Starting from NGINX 1.9.11, you can also compile this module as a dynamic module, by using the `--add-dynamic-module=PATH` option instead of `--add-module=PATH` on the
-`./configure` command line above. And then you can explicitly load the module in your `nginx.conf` via the [load_module](https://nginx.org/en/docs/ngx_core_module.html#load_module)
-directive, for example,
+Synopsis
+========
 
 ```nginx
-load_module /path/to/modules/ndk_http_module.so;  # assuming NDK is built as a dynamic module too
-load_module /path/to/modules/ngx_http_form_input_module.so;
+location /login {
+    set_form_input      $user;          # the "user" field of the body
+    set_unescape_uri    $user;          # values arrive percent encoded
+
+    proxy_set_header    X-User $user;
+    proxy_pass          http://backend;
+}
+```
+
+```nginx
+location /search {
+    set_form_input      $q query;       # the "query" field, into $q
+    set_unescape_uri    $q;
+
+    if ($q = "") {
+        return 400;
+    }
+
+    proxy_pass http://backend;
+}
+```
+
+A field that a form sends more than once, `tag=a&tag=b&tag=c` from a set
+of checkboxes for example, needs `set_form_input_multi` and
+`array_join`:
+
+```nginx
+location /tags {
+    set_form_input_multi $tags tag;
+    array_join ',' $tags;               # $tags is a string from here on
+
+    proxy_set_header X-Tags $tags;
+    proxy_pass http://backend;
+}
 ```
 
 [Back to TOC](#table-of-contents)
 
-Usage
-=====
+Installation
+============
 
-```nginx
-set_form_input $variable;
-set_form_input $variable argument;
+The module needs [ngx_devel_kit](https://github.com/openresty/ngx_devel_kit)
+in every build, and it has to be named before this module on the
+`./configure` line.  Grab the current nginx release from
+[nginx.org](https://nginx.org/en/download.html) and build the two
+together:
 
-set_form_input_multi $variable;
-set_form_input_multi $variable argument;
+```bash
+v=1.31.5   # whatever the current release is
+
+wget "https://nginx.org/download/nginx-$v.tar.gz"
+tar -xzf "nginx-$v.tar.gz"
+cd "nginx-$v"
+
+./configure --add-module=/path/to/ngx_devel_kit \
+    --add-module=/path/to/form-input-nginx-module
+
+make -j4
+make install
 ```
 
-example:
+Two further modules belong on the same line in most cases, and both need
+ngx_devel_kit as well:
+
+* [set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
+brings `set_unescape_uri`.  Field values come out of the body as they
+were sent, that is percent encoded, so without it a value like
+`a+b%26c` never becomes `a b&c`.
+
+* [array-var-nginx-module](https://github.com/openresty/array-var-nginx-module)
+brings `array_join`.  It is not optional for `set_form_input_multi`:
+nginx refuses to start when that directive is used in a build without
+it, because nothing else can read the variable it produces.
+
+Released tarballs of this module are on the
+[tags page](https://github.com/joneum/form-input-nginx-module/tags).
+
+Building as a dynamic module
+----------------------------
+
+Pass `--add-dynamic-module=PATH` instead of `--add-module=PATH` and load
+the result from `nginx.conf` with
+[load_module](https://nginx.org/en/docs/ngx_core_module.html#load_module).
+ngx_devel_kit has to be loaded first:
 
 ```nginx
-#nginx.conf
-
-location /foo {
-    client_max_body_size 100k;
-
-    set_form_input $data;    # read "data" field into $data
-    set_form_input $foo foo; # read "foo" field into $foo
-}
-
-location /bar {
-    client_max_body_size 1m;
-
-    set_form_input_multi $data; # read all "data" field into $data
-    set_form_input_multi $foo data; # read all "data" field into $foo
-
-    array_join ' ' $data; # now $data is a string
-    array_join ' ' $foo;  # now $foo is a string
-}
-
-location /baz {
-    client_max_body_size 100k;
-
-    # values come out of the body as they were sent, that is still
-    # percent encoded and with '+' for a space.  set_unescape_uri from
-    # set-misc-nginx-module turns "a+b%26c" into "a b&c".
-    set_form_input $data;
-    set_unescape_uri $data;
-}
+load_module modules/ndk_http_module.so;
+load_module modules/ngx_http_form_input_module.so;
 ```
 
 [Back to TOC](#table-of-contents)
@@ -168,8 +195,8 @@ percent encoded and with `+` standing for a space.  See
 
 The directive belongs in a `location`.  Older versions of this module
 also accepted it in a `server` or `http` block, where it had no effect
-and left the variable empty without a warning.  Since 0.12.2 nginx
-refuses to start on such a configuration.
+and left the variable empty without a warning.  nginx now refuses to
+start on such a configuration.
 
 [Back to TOC](#table-of-contents)
 
@@ -198,11 +225,10 @@ them before anything else touches it.
 
 Writing the variable straight into a response puts the raw bytes of the
 array structure there, live heap addresses included, instead of the
-field values.  That is a property of the calling convention that
-array-var defines, and array-var's own array variables behave the same
-way.  Since 0.12.2 nginx refuses to start when the directive is used in
-a build that has no array-var, because there is nothing that could read
-the variable then.
+field values.  That is a property of the calling convention array-var
+defines, and array-var's own array variables behave the same way.  In a
+build without array-var nothing could read the variable at all, so nginx
+refuses to start when the directive is used there.
 
 [Back to TOC](#table-of-contents)
 
@@ -210,36 +236,44 @@ Limitations
 ===========
 
 * Only bodies encoded as `application/x-www-form-urlencoded` are parsed.
-Any other content type, `multipart/form-data` in particular, is left alone.
+Any other content type, `multipart/form-data` in particular, is left
+alone and the variables stay empty.  File uploads are out of scope.
 
-* Field values are handed out exactly as they appear in the body, that is
-still percent encoded. Use `set_unescape_uri` from
+* Field values are handed out exactly as they appear in the body, that
+is still percent encoded and with `+` for a space.  Use
+`set_unescape_uri` from
 [set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
 to decode them.
 
-Request bodies that nginx buffers to a temporary file, which happens as soon
-as they exceed `client_body_buffer_size`, are read back from that file since
-version 0.12.1. Earlier versions discarded them, which is why older
-documentation asked for `client_max_body_size` and `client_body_buffer_size`
-to be set to the same value. That is no longer necessary.
+* A location that names a directive reads the whole request body before
+the rewrite phase finishes.  That is what the module is for, but it also
+means `proxy_request_buffering off` no longer gets a location anything:
+the body is already on hand before the upstream is contacted.
+
+Request bodies that nginx writes to a temporary file, which happens as
+soon as they exceed `client_body_buffer_size`, are read back from that
+file since version 0.12.1.  Earlier versions silently discarded them,
+which is why older documentation asked for `client_max_body_size` and
+`client_body_buffer_size` to be set to the same value.  That is no
+longer necessary.
 
 [Back to TOC](#table-of-contents)
 
 Compatibility
 =============
 
-This module is kept working with the current nginx releases, mainline
-1.31.5 and stable 1.30.4.  The test suite is also run against older
-releases down to 1.22 and passes there.
+The module is kept working with the current nginx releases.  Before
+anything is pushed the test suite is run against the current mainline
+and stable releases, and against older ones down to 1.22, which is the
+oldest release it is checked on.
 
-A caveat on the current stable, nginx 1.30.4: form_input itself works on
-it, but array-var-nginx-module and set-misc-nginx-module do not.  Every
-request passing through `array_join` or `set_unescape_uri` terminates
-the worker process, which leaves `set_form_input_multi` and decoding
-unusable on that release.  Measured against their own test suites, which
-fail completely on 1.30.4 and pass on 1.30.0 to 1.30.3 and on 1.31.x.
-The cause was not tracked down further, form_input is not involved: the
-same failure occurs in an nginx built without this module.
+One caveat, and it is not this module's doing: on nginx 1.30.4
+array-var-nginx-module and set-misc-nginx-module terminate the worker
+process on every request that passes through `array_join` or
+`set_unescape_uri`.  That leaves `set_form_input_multi` and decoding
+unusable on that one release.  Their own test suites fail there
+completely and pass on the releases before and after it, in an nginx
+built without this module just the same.
 
 [Back to TOC](#table-of-contents)
 
@@ -247,18 +281,18 @@ Test Suite
 ==========
 
 The tests are written for
-[Test::Nginx::Socket](https://metacpan.org/dist/Test-Nginx), install it from
-CPAN:
+[Test::Nginx::Socket](https://metacpan.org/dist/Test-Nginx), install it
+from CPAN:
 
 ```bash
 cpanm --notest Test::Nginx::Socket
 ```
 
-They do not exercise this module on its own.  Build an nginx that carries
-ngx_devel_kit, [echo-nginx-module](https://github.com/openresty/echo-nginx-module)
-for the output, [set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
-and [array-var-nginx-module](https://github.com/openresty/array-var-nginx-module),
-plus this module.  ngx_devel_kit has to come before the modules that use it:
+They do not exercise this module on its own.  Build an nginx that
+carries ngx_devel_kit,
+[echo-nginx-module](https://github.com/openresty/echo-nginx-module) for
+the output, set-misc-nginx-module and array-var-nginx-module, plus this
+module.  ngx_devel_kit has to come before the modules that use it:
 
 ```bash
 ./configure --prefix=/tmp/nginx-test \
@@ -277,8 +311,8 @@ repository:
 TEST_NGINX_BINARY=/tmp/nginx-test/sbin/nginx prove -r t/
 ```
 
-`valgrind.suppress` in the repository root is picked up automatically when
-the tests are run with `TEST_NGINX_USE_VALGRIND`.
+`valgrind.suppress` in the repository root is picked up automatically
+when the tests are run with `TEST_NGINX_USE_VALGRIND`.
 
 [Back to TOC](#table-of-contents)
 
@@ -296,8 +330,7 @@ Bugs and Patches
 
 Please report bugs and send patches through the
 [GitHub issue tracker](https://github.com/joneum/form-input-nginx-module/issues)
-of this repository.  The issue tracker of the original project is not
-watched.
+of this repository.
 
 [Back to TOC](#table-of-contents)
 
@@ -336,4 +369,3 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 [Back to TOC](#table-of-contents)
-
