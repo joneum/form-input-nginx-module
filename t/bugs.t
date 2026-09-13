@@ -51,8 +51,7 @@ bar=32
 
 
 
-=== TEST 3: Internal server error when using array_map_op
-https://github.com/calio/form-input-nginx-module/issues/1
+=== TEST 3: form fields through array_split, array_map_op and array_join
 --- config
    location ~ ^/(\w+)/(\d+)/?$ {
        set_form_input    $columns;
