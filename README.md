@@ -46,11 +46,14 @@ normally would.
 Status
 ======
 
-The module is maintained and released here.  Every change is run
-against the current nginx releases and through the whole test suite
-before it is pushed, and that suite is part of this repository so the
-claim can be checked.  See [Test Suite](#test-suite) and
-[Compatibility](#compatibility).
+[![CI](https://github.com/joneum/form-input-nginx-module/actions/workflows/ci.yml/badge.svg)](https://github.com/joneum/form-input-nginx-module/actions/workflows/ci.yml)
+
+The module is maintained and released here.  Every push and every pull
+request is built against a range of nginx releases and run through the
+whole test suite, built into the binary and again as loadable modules,
+and a valgrind run comes on top of that.  The suite is part of this
+repository, so none of it has to be taken on trust.  See
+[Test Suite](#test-suite) and [Compatibility](#compatibility).
 
 [Back to TOC](#table-of-contents)
 
@@ -293,11 +296,26 @@ from CPAN:
 cpanm --notest Test::Nginx::Socket
 ```
 
-They do not exercise this module on its own.  Build an nginx that
+They do not exercise this module on its own.  They need an nginx that
 carries ngx_devel_kit,
 [echo-nginx-module](https://github.com/openresty/echo-nginx-module) for
 the output, set-misc-nginx-module and array-var-nginx-module, plus this
-module.  ngx_devel_kit has to come before the modules that use it:
+module.  `ci/build.sh` fetches those four at the versions the
+continuous integration pins and builds that nginx:
+
+```bash
+ci/build.sh 1.31.5 /tmp/nginx-test
+TEST_NGINX_BINARY=/tmp/nginx-test/sbin/nginx prove -r t/
+```
+
+The same script builds the two other shapes the workflow checks.
+`ci/build.sh 1.31.5 /tmp/nginx-dyn dynamic` makes every module a
+loadable object, and `ci/build.sh 1.31.5 /tmp/nginx-noav no-array-var`
+leaves array-var out, which is the only way to reach the configuration
+error that `set_form_input_multi` raises in such a build.
+
+To assemble it by hand instead, ngx_devel_kit has to come before the
+modules that use it:
 
 ```bash
 ./configure --prefix=/tmp/nginx-test \
@@ -307,13 +325,6 @@ module.  ngx_devel_kit has to come before the modules that use it:
     --add-module=/path/to/set-misc-nginx-module \
     --add-module=/path/to/array-var-nginx-module
 make && make install
-```
-
-Then point the suite at that binary and run it from the root of this
-repository:
-
-```bash
-TEST_NGINX_BINARY=/tmp/nginx-test/sbin/nginx prove -r t/
 ```
 
 `valgrind.suppress` in the repository root is picked up automatically
