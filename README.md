@@ -46,13 +46,10 @@ normally would.
 Status
 ======
 
-This is a maintained continuation of
-[calio/form-input-nginx-module](https://github.com/calio/form-input-nginx-module),
-which has seen no release since 0.12 in 2016.  Development continues
-here, the issue tracker of the original project is not watched.
-
-The module is in use and the test suite is run against the current nginx
-releases before anything is pushed.  See
+The module is maintained and released here.  Every change is run
+against the current nginx releases and through the whole test suite
+before it is pushed, and that suite is part of this repository so the
+claim can be checked.  See [Test Suite](#test-suite) and
 [Compatibility](#compatibility).
 
 [Back to TOC](#table-of-contents)
