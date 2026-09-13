@@ -52,8 +52,16 @@ fetch_module set-misc-nginx-module "$SETMISC_TAG"
 fetch_module array-var-nginx-module "$ARRAYVAR_TAG"
 
 tarball=$WORK/nginx-$NGINX.tar.gz
-[ -s "$tarball" ] ||
-	curl -sSfL -o "$tarball" "https://nginx.org/download/nginx-$NGINX.tar.gz"
+url=https://nginx.org/download/nginx-$NGINX.tar.gz
+
+if [ ! -s "$tarball" ]; then
+	# curl is a package on FreeBSD, fetch is in the base system
+	if command -v curl > /dev/null 2>&1; then
+		curl -sSfL -o "$tarball" "$url"
+	else
+		fetch -q -o "$tarball" "$url"
+	fi
+fi
 
 rm -rf "$WORK/nginx-$NGINX"
 tar xzf "$tarball" -C "$WORK"

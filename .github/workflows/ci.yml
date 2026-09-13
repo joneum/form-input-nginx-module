@@ -113,6 +113,25 @@ jobs:
           TEST_NGINX_LOAD_MODULES="$mods" \
             TEST_NGINX_BINARY="$HOME/nginx/sbin/nginx" prove -r t/
 
+  freebsd:
+    name: FreeBSD
+    runs-on: ubuntu-latest
+    # every other job measures Linux, and the port this module is
+    # packaged in is a FreeBSD one
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and run the suite in a FreeBSD virtual machine
+        uses: vmactions/freebsd-vm@v1.5.6
+        with:
+          release: '14'
+          prepare: |
+            pkg install -y git pcre2 p5-Test-Nginx
+          run: |
+            ci/build.sh 1.31.5 "$HOME/nginx"
+            TEST_NGINX_BINARY="$HOME/nginx/sbin/nginx" prove -r t/
+
   valgrind:
     name: valgrind
     runs-on: ubuntu-latest
