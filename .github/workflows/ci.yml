@@ -130,7 +130,11 @@ jobs:
             pkg install -y git pcre2 p5-Test-Nginx
           run: |
             ci/build.sh 1.31.5 "$HOME/nginx"
-            TEST_NGINX_BINARY="$HOME/nginx/sbin/nginx" prove -r t/
+            # the job runs as root, and Test::Nginx then writes "user
+            # root;" into its configuration.  root has no group of that
+            # name here, it is in wheel
+            TEST_NGINX_WORKER_USER='root wheel' \
+              TEST_NGINX_BINARY="$HOME/nginx/sbin/nginx" prove -r t/
 
   valgrind:
     name: valgrind
