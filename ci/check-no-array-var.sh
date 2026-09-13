@@ -16,6 +16,11 @@ T=${CI_WORK:-.}/no-array-var
 rm -rf "$T"
 mkdir -p "$T/conf" "$T/logs"
 
+# nginx resolves a relative path in the configuration against the prefix
+# it was given with -p, so a relative one here would be applied twice
+
+T=$(cd "$T" && pwd)
+
 write_conf() {
 	cat > "$T/conf/nginx.conf" <<EOF
 worker_processes 1;
