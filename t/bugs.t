@@ -98,6 +98,7 @@ bar=32
 --- config
 location /modtest {
         set_form_input_multi $val;
+        array_join ',' $val;
         echo $val;
 }
 --- request

@@ -225,6 +225,12 @@ that only the directives of
 can read, `array_join` in particular.  Pass the variable through one of
 them before anything else touches it.
 
+It carries that array on every request, including the ones the module
+does not look at, a GET or a different content type.  The array is empty
+then and `array_join` makes an empty string of it, so a location using
+these two directives answers such a request normally instead of failing
+it.
+
 Writing the variable straight into a response puts the raw bytes of the
 array structure there, live heap addresses included, instead of the
 field values.  That is a property of the calling convention array-var

@@ -47,6 +47,8 @@ typedef struct {
 
 static ngx_int_t ngx_http_set_form_input(ngx_http_request_t *r, ngx_str_t *res,
     ngx_http_variable_value_t *v);
+static ngx_int_t ngx_http_form_input_empty_array(ngx_http_request_t *r,
+    ngx_str_t *res);
 static ngx_flag_t ngx_http_form_input_have_array_var(ngx_conf_t *cf);
 static char *ngx_http_set_form_input_conf_handler(ngx_conf_t *cf,
     ngx_command_t *cmd, void *conf);
@@ -149,38 +151,45 @@ ngx_http_set_form_input(ngx_http_request_t *r, ngx_str_t *res,
 }
 
 
+/* hand out an array with nothing in it.  a request that carries no form
+ * body still has to leave a readable value behind: array_join and the
+ * other array-var directives refuse a value whose length is not
+ * sizeof(ngx_array_t) and fail the request with a 500, so the empty
+ * string that used to stand here answered a plain GET with an error */
+static ngx_int_t
+ngx_http_form_input_empty_array(ngx_http_request_t *r, ngx_str_t *res)
+{
+    ngx_array_t         *array;
+
+    array = ngx_array_create(r->pool, 1, sizeof(ngx_str_t));
+    if (array == NULL) {
+        return NGX_ERROR;
+    }
+
+    res->data = (u_char *) array;
+    res->len = sizeof(ngx_array_t);
+
+    return NGX_OK;
+}
+
+
 static ngx_int_t
 ngx_http_set_form_input_multi(ngx_http_request_t *r, ngx_str_t *res,
     ngx_http_variable_value_t *v)
 {
     ngx_http_form_input_ctx_t           *ctx;
-    ngx_int_t                            rc;
 
     dd_enter();
 
-    dd("set default return value");
-    ngx_str_set(res, "");
-
-    if (r->done) {
-        dd("request done");
-        return NGX_OK;
-    }
-
     ctx = ngx_http_get_module_ctx(r, ngx_http_form_input_module);
 
-    if (ctx == NULL) {
-        dd("ndk handler:null ctx");
-        return NGX_OK;
+    if (r->done || ctx == NULL || !ctx->done) {
+        dd("no request body was parsed, handing out an empty array");
+
+        return ngx_http_form_input_empty_array(r, res);
     }
 
-    if (!ctx->done) {
-        dd("ctx not done");
-        return NGX_OK;
-    }
-
-    rc = ngx_http_form_input_arg(r, v->data, v->len, res, 1);
-
-    return rc;
+    return ngx_http_form_input_arg(r, v->data, v->len, res, 1);
 }
 
 
