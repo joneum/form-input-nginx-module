@@ -16,6 +16,7 @@ Table of Contents
 * [Directives](#directives)
     * [set_form_input](#set_form_input)
     * [set_form_input_multi](#set_form_input_multi)
+    * [form_input_multipart](#form_input_multipart)
 * [Limitations](#limitations)
 * [Compatibility](#compatibility)
 * [Test Suite](#test-suite)
@@ -28,9 +29,9 @@ Description
 
 nginx hands out the arguments of a query string as `$arg_name`, but it
 has nothing for the body of a form submission.  This module closes that
-gap: it parses the body of a POST or PUT request carrying a content type
-of `application/x-www-form-urlencoded` and assigns a field of that body
-to a variable.
+gap: it parses the body of a POST or PUT request that carries a form and
+assigns a field of that body to a variable.  Urlencoded bodies are read
+out of the box, `multipart/form-data` where it is asked for.
 
 The work happens in the rewrite phase, before a content handler sees the
 request, so the value is available to everything that reads variables
@@ -51,8 +52,10 @@ Status
 The module is maintained and released here.  Every push and every pull
 request is built against a range of nginx releases and run through the
 whole test suite, built into the binary and again as loadable modules,
-and a valgrind run comes on top of that.  The suite is part of this
-repository, so none of it has to be taken on trust.  See
+and once more inside a FreeBSD virtual machine, which is the platform
+the module is packaged for.  A run under valgrind comes on top of that
+on everything but a pull request.  The suite is part of this repository,
+so none of it has to be taken on trust.  See
 [Test Suite](#test-suite) and [Compatibility](#compatibility).
 
 [Back to TOC](#table-of-contents)
@@ -70,6 +73,11 @@ location /login {
 }
 ```
 
+A field value is whatever the client sent, and decoding it makes more of
+it, not less: `%0d%0a` becomes a real line break and that line break
+becomes a second header.  [Limitations](#limitations) says what to do
+about it, and it is worth reading before copying this.
+
 ```nginx
 location /search {
     set_form_input      $q query;       # the "query" field, into $q
@@ -82,6 +90,22 @@ location /search {
     proxy_pass http://backend;
 }
 ```
+
+A form that can carry a file is sent as `multipart/form-data`, and that
+has to be switched on.  Its values are literal, so nothing decodes them:
+
+```nginx
+location /profile {
+    form_input_multipart on;
+
+    set_form_input      $nick;      # no set_unescape_uri here
+    proxy_set_header    X-Nick $nick;
+    proxy_pass          http://backend;
+}
+```
+
+The same caveat applies, and here the client does not even have to
+encode anything: a `<textarea>` sends its line breaks as they are.
 
 A field that a form sends more than once, `tag=a&tag=b&tag=c` from a set
 of checkboxes for example, needs `set_form_input_multi` and
@@ -175,11 +199,19 @@ leading `$` is used, so `set_form_input $data;` reads the field named
 `data`.
 
 Only POST and PUT requests carrying a content type of
-`application/x-www-form-urlencoded` are looked at.  Parameters behind
+`application/x-www-form-urlencoded` are looked at, and
+`multipart/form-data` where
+[form_input_multipart](#form_input_multipart) is on.  Parameters behind
 the type do not matter, `; charset=UTF-8` is still that type, but a
 longer type that merely begins with the same characters is not.
-Everything else passes through and the variable stays empty.  The
-variable is also empty when the field does not occur in the body.
+Everything else passes through and the variable stays empty.
+
+An empty variable says less than it looks like: the field may be
+missing, or the request may not have been one this module reads at all.
+Nothing about that fails the request, so an empty value must not be read
+as "the client sent nothing" and must not stand in for a check.
+[form_input_multipart](#form_input_multipart) adds more ways for it to
+come out empty.
 
 If the field occurs more than once, the first occurrence wins.  Use
 `set_form_input_multi` to get all of them.
@@ -187,9 +219,17 @@ If the field occurs more than once, the first occurrence wins.  Use
 Field names are matched without regard to case, so `set_form_input $v
 data;` also reads a field sent as `DATA`.  This is what nginx itself
 does for query arguments, `ngx_http_arg()` behind `$arg_name` matches
-the same way.  Together with the rule above it means a client decides
-which spelling wins by sending it first: out of `DATA=a&data=b` the
-variable receives `a`.
+the same way, and it holds for both encodings here.  Together with the
+rule above it means a client decides which spelling wins by sending it
+first: out of `DATA=a&data=b` the variable receives `a`.
+
+Whatever reads the body after nginx almost certainly does not work that
+way.  A form library compares the name byte for byte, so out of the same
+body it takes `b`.  A client that sends two spellings can therefore show
+this module one value and the application another.  Where the variable
+only travels along that costs nothing; where it decides something, match
+on a name the application would also accept, and do not let the
+difference stand in for a check.
 
 The value is assigned exactly as it appears in the body, that is still
 percent encoded and with `+` standing for a space.  See
@@ -240,18 +280,100 @@ refuses to start when the directive is used there.
 
 [Back to TOC](#table-of-contents)
 
+form_input_multipart
+--------------------
+
+**syntax:** *form_input_multipart on | off*
+
+**default:** *form_input_multipart off*
+
+**context:** *http, server, location*
+
+Lets the two directives above read a `multipart/form-data` body as well,
+the encoding a browser uses for a form that can carry files.  Without
+it such a body is left alone and the variables stay empty.
+
+It is off by default, because switching it on changes two things a
+configuration has to know about.
+
+**Values arrive literally.**  A urlencoded body carries them percent
+encoded, which is why the documented pairing is `set_unescape_uri`.  A
+multipart body does not: what the field held is what the variable gets.
+Decoding it anyway corrupts it, `a+b` would turn into `a b` and `100%25`
+into `100%`.  A location that accepts both encodings cannot decode
+blindly.
+
+**The whole body ends up in memory.**  The module reads it before the
+rewrite phase ends, and multipart is what file uploads travel in.  nginx
+may write a large body to a temporary file first, but the module then
+reads that file back into a single allocation from the request pool, so
+`client_max_body_size` is what bounds the memory one request can take.
+Keep it small in a location that switches this on, or the uploads the
+switch was meant to accept will be held in memory one by one.
+
+Nothing bounds a single field either.  Whatever the part held is what
+the variable gets, which is worth knowing when the value travels on in a
+header through `proxy_set_header`.
+
+Parts that name a file are skipped.  A part whose `Content-Disposition`
+carries a `filename` parameter, or the `filename*` that RFC 5987 spells
+a non-ASCII one with, is an upload rather than a form field, so its
+content never reaches a variable, whatever the part is called.
+
+A part is skipped as well when its headers do not hold together: a line
+folded onto the one below it, which RFC 9112 deprecates and no form
+sender produces, or a second `Content-Disposition`.  Either of those
+could hide a `filename` from the rule above, so the part goes rather
+than the rule.
+
+A part is skipped for a third reason: a `Content-Transfer-Encoding`
+naming anything but `7bit`, `8bit` or `binary`.  RFC 7578 tells senders
+not to use one at all, but a form library that meets `base64` here
+decodes it and this module does not, so handing the value out would put
+two different answers in front of the same request.
+
+Nothing here fails a request.  A body that does not hold together, a
+content type that names no boundary, and one that names a boundary
+longer than the 70 characters RFC 2046 allows all end the same way: the
+variables stay empty and the request runs on.  The first two say so in
+the error log at `info` level, a body without a single delimiter says
+nothing at all.
+
+Every one of these rules refuses rather than guesses, so where this
+module is unsure it hands out nothing while the application behind it
+may well read a field.  That is the safe direction for a value that
+travels on, and the wrong one for a value that is meant to hold a
+request back.  Do not build a gate out of it.
+
+[Back to TOC](#table-of-contents)
+
 Limitations
 ===========
 
-* Only bodies encoded as `application/x-www-form-urlencoded` are parsed.
-Any other content type, `multipart/form-data` in particular, is left
-alone and the variables stay empty.  File uploads are out of scope.
+* Two encodings are parsed, `application/x-www-form-urlencoded` and,
+where [form_input_multipart](#form_input_multipart) is on,
+`multipart/form-data`.  Any other content type is left alone and the
+variables stay empty.
 
-* Field values are handed out exactly as they appear in the body, that
-is still percent encoded and with `+` for a space.  Use
+* File uploads are out of scope.  A multipart part that names a file is
+skipped rather than read into a variable.
+
+* A field value is bytes out of the request and nothing in it is
+escaped, checked or refused.  One that holds CR and LF turns into more
+than one header line as soon as it reaches `proxy_set_header`, and nginx
+does not stop that.  Measured against 1.31.5, a field holding
+`bob<CR><LF>X-Injected: yes` arrives at the upstream as two headers, and
+it does so with either encoding.  What multipart changes is how likely
+it is: a `<textarea>` sends line breaks as they are, where a urlencoded
+form percent encodes them.  Do not put a field value into a header
+without deciding what a line break in it should mean.
+
+* Field values of a urlencoded body are handed out exactly as they
+appear, that is still percent encoded and with `+` for a space.  Use
 `set_unescape_uri` from
 [set-misc-nginx-module](https://github.com/openresty/set-misc-nginx-module)
-to decode them.
+to decode them.  Values of a multipart body are literal and must not go
+through it.
 
 * A location that names a directive reads the whole request body before
 the rewrite phase finishes.  That is what the module is for, but it also
