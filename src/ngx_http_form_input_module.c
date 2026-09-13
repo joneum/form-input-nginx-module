@@ -516,6 +516,7 @@ ngx_http_form_input_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_http_form_input_handler(ngx_http_request_t *r)
 {
+    u_char                          *p;
     ngx_http_form_input_ctx_t       *ctx;
     ngx_http_form_input_loc_conf_t  *flcf;
     ngx_str_t                        value;
@@ -574,6 +575,20 @@ ngx_http_form_input_handler(ngx_http_request_t *r)
     {
         dd("not application/x-www-form-urlencoded");
         return NGX_DECLINED;
+    }
+
+    /* the media type ends at the end of the header value or where the
+     * parameters begin, RFC 9110 allows whitespace before that
+     * semicolon.  anything else after the name is a different media
+     * type that merely starts the same way */
+
+    if (value.len > form_urlencoded_type_len) {
+        p = value.data + form_urlencoded_type_len;
+
+        if (*p != ';' && *p != ' ' && *p != '\t') {
+            dd("content type only begins like x-www-form-urlencoded");
+            return NGX_DECLINED;
+        }
     }
 
     dd("content type is application/x-www-form-urlencoded");

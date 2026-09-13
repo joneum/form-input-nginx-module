@@ -175,9 +175,11 @@ leading `$` is used, so `set_form_input $data;` reads the field named
 `data`.
 
 Only POST and PUT requests carrying a content type of
-`application/x-www-form-urlencoded` are looked at.  Everything else
-passes through and the variable stays empty.  The variable is also empty
-when the field does not occur in the body.
+`application/x-www-form-urlencoded` are looked at.  Parameters behind
+the type do not matter, `; charset=UTF-8` is still that type, but a
+longer type that merely begins with the same characters is not.
+Everything else passes through and the variable stays empty.  The
+variable is also empty when the field does not occur in the body.
 
 If the field occurs more than once, the first occurrence wins.  Use
 `set_form_input_multi` to get all of them.
