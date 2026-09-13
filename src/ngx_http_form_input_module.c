@@ -488,7 +488,7 @@ ngx_http_set_form_input_conf_handler(ngx_conf_t *cf, ngx_command_t *cmd,
         s.data = (value + 1)->data;
     }
 
-    return ndk_set_var_multi_value_core (cf, value,  &s, &filter);
+    return ndk_set_var_multi_value_core(cf, value, &s, &filter);
 }
 
 
@@ -496,7 +496,6 @@ ngx_http_set_form_input_conf_handler(ngx_conf_t *cf, ngx_command_t *cmd,
 static ngx_int_t
 ngx_http_form_input_init(ngx_conf_t *cf)
 {
-
     ngx_http_handler_pt             *h;
     ngx_http_core_main_conf_t       *cmcf;
     ngx_http_form_input_main_conf_t *fmcf;
