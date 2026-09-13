@@ -1,6 +1,9 @@
 # created by the test suite
 t/servroot/
 
+# created by ci/build.sh
+ci-work/
+
 # editor leftovers
 *~
 *.swp
